@@ -1,0 +1,186 @@
+---
+title: "Análisis espacial en R: Producción agrícola por entidad federativa"
+author: "Roberto Valdez Rivera"
+date: "2024-12-17"
+format:
+  html:
+    toc: true
+    code-fold: show
+    number-section: true
+categories: [Agricultura,Entidades, Cultivos, R]    
+editor_options: 
+  chunk_output_type: console
+image: "por.png"
+---
+
+La producción agrícola en México tiene una importacia fundamental sobre las actividades primarias y, en general, sobre la alimentación humana. Involucra a cientos de miles de personas que abarcan desde los dueños de las hectáreas o áreas a cosechar hasta los trabajadores o *peones* que reciben una contraprestación, en muchos de los casos bajas, por sus labores periodícas. El cultivo comprende verduras y hortalizas, frutas, cereales y granos, así como legumbres que día a día necesitamos consumir para poder obtener diversidad de micronutrientes.
+
+### Propósito
+
+El presente estudio tiene el propósito principal de conocer las condiciones de la producción agrícola en México durante el 2023. Desde realizar un análisis para observar el comportamiento en la producción cultivada por tipo de modalidad hasta un análisis agregado de las condiciones del valor total generado, entre otros, por entidad federativa.
+
+### Datos
+
+En México, por medio del [Sistema de Información Agroalimentaria y Pesquera (SIAP)](http://infosiap.siap.gob.mx/gobmx/datosAbiertos.php), de la Secretaría de Agricultura y Desarrollo Rural, podemos encontrar información valiosa sobre las condiciones de producción del sector primario nacional. En este caso, es de utilidad revisar cuáles fueron los datos de producción agrícola registrados durante el 2023 en cerca de 317 cultivos diferentes a lo largo del territorio nacional. La base de datos se encuentra en formato *csv*.
+
+Asimismo, utilizando el Proyecto Básico de información 2020 del INEGI podemos obtener el archivo con extensión *shp* que contiene la información espacial con desagregación estatal. **Nota: el archivo ha sido modificado a fin de dejar solo las variables de interés, reduciéndolo a 4 variables.**
+
+Es necesario consultar el contenido del diccionario agrícola para conocer la descripción de cada variable e identificar cuáles son de utilidad para el análisis que queremos llevar a cabo.
+
+Primero, es necesario cargar las librerías necesarias. Para el manejo de las variables, *dplyr* es de muchísima utilidad; la librería *sf* nos ayuda a poder leer archivos *simple features* que contienen información geográfica y, por su parte, con *tmap* podemos crear mapas interactivos. Por último, utilizando algunas funciones de *leaflete* podemos configurar el mapa que nos permitirá observar las características de la producción agrícola durante el 2023.
+
+```{r,echo=FALSE}
+knitr::opts_chunk$set(message = F,
+                      warning = F,
+                      error = F,
+                      comment = NA)
+```
+
+```{r}
+library(dplyr)
+library(tmap)
+library(leaflet)
+library(sf)
+library(ggplot2)
+```
+
+Para importar la base de datos es necesario realizarlo por medio de la función *read.csv()* y utilizando la función *read_sf()* podremos leer el archivo *shapefile* que contiene los vectores geográficos.
+
+```{r}
+datos <- read.csv("prod_agricola_2023.csv", encoding ="latin1")
+v <- read_sf("Archivos espaciales/esta.shp")
+```
+
+### Exploración
+
+Por medio de la función *dim()* podemos conocer las dimensiones de las bases de datos. En el caso de la producción agrícola, la base de datos contiene 38,696 filas por 24 columnas; el archivo con los vectores espaciales tiene 32 filas por 4 columnas. De igual forma, para poder observar las primeras filas de cada variable necesitamos imprimirlas con *head()*.
+
+```{r}
+head(datos,3)
+```
+
+```{r}
+head(v,3)
+```
+
+Antes de pasar al manejo de los datos, por medio de la visualización general que puede realizarse de estos, podemos explorar cuál es el comportamiento que tiene la producción agrícola de acuerdo al ciclo productivo (Otoño-invierno, Perennes y Primavera-Verano), además de responder a la cuestión de qué tanto influye la modalidad de cultivo (Riego o temporal).
+
+```{r}
+g1 <- datos%>%ggplot()+geom_point(aes(x= Cosechada, 
+                                      y=Volumenproduccion,
+                                      color=Nommodalidad))+
+  facet_wrap(~Nomcicloproductivo)+
+  labs(title="Caracterísitcas de la producción agrícola por ciclo productivo y modalidad",
+       x="Área cosechada (hectáreas)",
+       y="Producción (toneladas)",
+       color="Modalidad")+
+  scale_y_continuous(labels=scales::label_number())+
+  lims(x=c(0,75e3), y=c(0,2e6))+theme_bw()+
+  scale_color_manual(values = c("cadetblue2","azure3"))
+
+plotly::ggplotly(g1)
+```
+
+De acuerdo a la gráfica anterior, en el ciclo Otoño-invierno, que inicia en octubre y finaliza en marzo del siguiente año, la modalidad de riego influye drásticamente entre las hectáreas destinadas al cultivo con respecto a las toneladas producidas. Por su parte, en el ciclo Perenne, caracterizado por cosechar y cultivar múltiples veces dentro de un año, la modalidad de riego suele presentar mejor rendimiento en comparación en el temporalidad. Por último, en el ciclo Primavera-verano (de abril a septiembre) la modalidad de riego aventaja ampliamente a la productividad conseguida por los cultivos de temporal.
+
+Por su parte, realizando un filtro de cinco cultivos Perennes los resultados indican que la modalidad de riego tiende a incrementar ligeramente la producción con respecto a los cultivos de temporal. Esto se muestra en la siguiente gráfica.
+
+```{r}
+g2 <- datos%>%filter(Nomcultivo %in% c("Plátano", "Manzana", "Naranja", "Aguacate"))%>%
+  ggplot()+geom_point(aes(x=Cosechada,
+                          y=Volumenproduccion,
+                          color=Nomcultivo))+
+  facet_wrap(~Nommodalidad)+
+  scale_y_continuous(labels=scales::label_number())+
+  lims(x=c(0,1e4),y=c(0,2e5))+
+  theme_bw()+labs(title="Características de cinco cultivos",
+                  x="Área cosechada (hectáreas)",
+                  y="Producción (toneladas)",
+                  color="Cultivo")+
+  scale_color_manual(values=c("palegreen3","palegreen1", "orange","yellow1"))+
+  geom_smooth(aes(x=Cosechada,y=Volumenproduccion),method = "lm",colour = "azure3")
+
+plotly::ggplotly(g2)
+```
+
+En otras palabras, la modalidad de cultivo influye positivamente en la producción que se obtiene por cada cultivo, acelerando los procesos con el consecuente aumento de la demanda de agua que requieriren.
+
+### Manipulación
+
+Dado que la base de datos de la producción agrícola contiene variables que están representadas de dos o más formas, es necesario seleccionar, por medio de la función *select()*, solo las variables de interés.
+
+```{r}
+datos <- datos %>% select(Nomestado,Nommunicipio,Nomcicloproductivo,
+                          Nommodalidad,Nomcultivo, Cosechada,
+                          Volumenproduccion,Preciomediorural,
+                          Valorproduccion)
+```
+
+Ahora bien, lo que nos puede interesar es conocer por entidad federativa cuáles fueron los resultados conseguidos en el total de la superficie destinada al cultivo, la suma total de la producción agrícola, así como el valor total que generó cada entidad por las actividades agricultoras. Para esto, es necesario agrupar por medio de la función *group_by()* por entidad federativa. Inmediatamente después con *summarise()* se indica lo que queremos obtener que para este caso es solo la sumatoria de las columnas de acuerdo a la variable de agrupación.
+
+```{r}
+datos_a <- datos%>% group_by(Nomestado)%>% summarise(Hectareas=sum(Cosechada),
+                                                     Toneladas=sum(Volumenproduccion), 
+                                                     Valor=sum(Valorproduccion))
+```
+
+Para realizar el análisis espacial es necesario que el archivo *shapefile* —en este caso lo llamamos "v"--- contenga las variables de interés. Sin embargo, no es así. Por tal motivo recurrimos al manejo de las variables dentro de un archivo diferente para poder obtener la información necesaria para representar espacialmente la información. Nótese que podríamos realizar el análisis con desagregación municipal, pero por temas de practicidad se realizará a nivel estatal, por lo que el manejo de los datos y la desagregación debe de coincidir para ambos archivos.
+
+Nos interesa que ambas bases de datos estén ordenadas de la misma forma y que también tengan una columna en común —con las mismas observaciones— para que, después, podamos unirlos. Para eso primero es necesario que nuestra base de datos agrupada contenga los nombres de forma idéntica. Tenemos entonces que modificar el contenido de tres filas en particular con el nombre completo de la entidad federativa.
+
+```{r}
+datos_a <- mutate(datos_a, Nomestado= recode(Nomestado,
+                                             "Coahuila"="Coahuila de Zaragoza",
+                                              "Michoacán"="Michoacán de Ocampo",
+                                              "Veracruz"="Veracruz de Ignacio de la Llave"))
+```
+
+Ahora solo nos falta ordenar las bases de datos con respecto a la variable en común con ayuda de *arrange()*.
+
+```{r}
+datos_a <- arrange(datos_a, Nomestado)
+v <- arrange(v, NOMGEO)
+```
+
+Utilizando la función *merge()* se indicarán los objetos a unir, así como por medio de qué columnas en común para cada caso. A través de *st_as_sf()* se indica la columna que contiene la información espacial. De esta forma se tendrá una nueva base de datos que contiene información sobre la producción agrícola por entidad federativa y la información espacial por medio de vectores geográficos.
+
+```{r}
+base <- merge(datos_a, v, by.x = "Nomestado",by.y = "NOMGEO")
+base <- st_as_sf(base, sf_column_name="geometry")
+```
+
+Dado que la cifras de la producción cosechada está expresada en decenas de millones y el valor total generado en miles de millones, lo mejor será dividirlos entre 1 mil y 1 millón, respectivamente, para que no tengamos problemas en la visualización ---por el número de cifras en las que están expresadas las variables.
+
+```{r}
+base <- mutate(base, Toneladas=Toneladas/1000, Valor=Valor/1000000)
+```
+
+### Visualización interactiva
+
+
+Una ventaja de utilizar la librería *tmap* es que tiene una sintaxis parecida a la de *ggplot2*. Para realizar la visualización de las tres variables de interés, se realizará en dos pasos. En primer lugar, por medio de *tm_basemap()* se indica la base de datos y por medio de la función *tm_polygons()* se indica la variable a mapear, la etiqueta para identificar las entidades, además de agregar la paleta de colores, el grupo para especificar la separación de las variables por capas y el título que debe de tener la leyenda. De esta forma para cada variable que deseemos representar como una capa.
+
+En segundo lugar, por medio de transformar el objeto tipo *tmap* a *leaflet* podremos utilizar la función *show/hideGroup* para especificar que al inicio solo se muestre una capa y no todas juntas.
+
+```{r}
+g3 <- tm_shape(base)+
+  tm_basemap(server="OpenStreetMap")+
+  tm_polygons("Hectareas",border.col="azure4",id="Nomestado",palette = "Greens",group = "H",
+          title = "Hectáreas destinadas a la cosecha")+
+  tm_shape(base)+
+  tm_polygons("Toneladas",border.col="azure4",id="Nomestado",palette="Greens",group = "T",
+          title = "Miles de Toneladas producidas",
+          breaks = c(0, seq(2e4,15e4,25e3),Inf))+
+  tm_shape(base)+
+  tm_polygons("Valor",border.col="azure4",id="Nomestado",palette = "Greens",group = "V",
+          title = "Valor generado en millones de pesos")+
+  tm_layout(title = "Resultados de la producción agrícola por entidad federativa en 2023",
+            title.position = c("left","top"))+
+  tm_view(view.legend.position = c("right","bottom"))+tm_scale_bar()
+  
+tmap_leaflet(g3) %>% showGroup("H") %>% hideGroup("T") %>% 
+  hideGroup("V")
+```
+
+Por último, para poder visualizar de mejor forma las capas es necesario que en el recuadro superior derecho se seleccione solo una capa para visualizar y observar. Seleccionando la entidad de interés podrá conocer el dato preciso resultado de la manipulación y la visualización realizado a los datos.
+
